@@ -1,48 +1,96 @@
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => document.querySelectorAll(selector);
+/* ─── Ready2Thread – Optimized Fixed Script ───────────── */
+"use strict";
 
-const header = $(".site-header");
-const menuToggle = $("#menuToggle");
-const navLinks = $("#navLinks");
-const backToTop = $("#backToTop");
-const year = $("#year");
+/* ─── Utilities ───────────────────────────────────────── */
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
 
-const quoteModal = $("#quoteModal");
-const quoteForm = $("#quoteForm");
-const formMessage = $("#formMessage");
-const quoteSteps = $$(".quote-step");
-const quoteProgress = $("#quoteProgress");
+/* ─── DOM Refs ────────────────────────────────────────── */
+const header         = $(".site-header");
+const menuToggle     = $("#menuToggle");
+const navLinks       = $("#navLinks");
+const backToTop      = $("#backToTop");
+const yearEl         = $("#year");
+
+const quoteModal     = $("#quoteModal");
+const quoteForm      = $("#quoteForm");
+const formMessage    = $("#formMessage");
+const quoteSteps     = $$(".quote-step");
+const quoteProgress  = $("#quoteProgress");
 const quoteStepCount = $("#quoteStepCount");
-const prevStepButton = $("#prevStep");
-const nextStepButton = $("#nextStep");
-const submitQuoteButton = $("#submitQuote");
+const prevBtn        = $("#prevStep");
+const nextBtn        = $("#nextStep");
+const submitBtn      = $("#submitQuote");
 
-const portfolioGrid = $("#portfolioGrid");
-const pagination = $("#portfolioPagination");
-const filterBtns = $$(".filter-btn");
+const portfolioGrid  = $("#portfolioGrid");
+const paginationEl   = $("#portfolioPagination");
+const filterBtns     = $$(".filter-btn");
 
-let currentQuoteStep = 0;
+const exitPopup      = $("#exitPopup");
+const popupOverlay   = $("#popupOverlay");
+
+/* ─── State ───────────────────────────────────────────── */
+let currentStep = 0;
 let currentFilter = "all";
 let currentPage = 1;
-const cardsPerPage = 8;
+const PER_PAGE = 8;
 
-if (year) year.textContent = new Date().getFullYear();
+let popupShown = false;
+let scrollPopupShown = false;
 
-/* Header + Back to Top */
-window.addEventListener("scroll", () => {
-  header?.classList.toggle("scrolled", window.scrollY > 40);
-  backToTop?.classList.toggle("show", window.scrollY > 500);
-});
+if (yearEl) yearEl.textContent = new Date().getFullYear();
 
+/* ─── Body Lock Safe Helpers ──────────────────────────── */
+function lockBody() {
+  document.body.classList.add("modal-lock");
+  document.body.style.overflow = "hidden";
+}
+
+function unlockBody() {
+  const quoteOpen = quoteModal?.classList.contains("open");
+  const popupOpen = exitPopup?.classList.contains("open");
+
+  if (!quoteOpen && !popupOpen) {
+    document.body.classList.remove("modal-lock");
+    document.body.style.overflow = "";
+  }
+}
+
+/* ─── Header Scroll ───────────────────────────────────── */
+const onScroll = () => {
+  const y = window.scrollY;
+
+  header?.classList.toggle("scrolled", y > 40);
+  backToTop?.classList.toggle("show", y > 500);
+
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+  if (
+    exitPopup &&
+    scrollHeight > 0 &&
+    !scrollPopupShown &&
+    !popupShown &&
+    y > scrollHeight * 0.38
+  ) {
+    scrollPopupShown = true;
+    setTimeout(showExitPopup, 600);
+  }
+};
+
+window.addEventListener("scroll", onScroll, { passive: true });
+
+/* ─── Menu Toggle ─────────────────────────────────────── */
 menuToggle?.addEventListener("click", () => {
-  navLinks?.classList.toggle("open");
-  menuToggle.classList.toggle("active");
+  const open = navLinks?.classList.toggle("open");
+  menuToggle.classList.toggle("active", !!open);
+  menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
 });
 
-$$(".nav-links a").forEach((link) => {
-  link.addEventListener("click", () => {
+$$(".nav-links a").forEach((a) => {
+  a.addEventListener("click", () => {
     navLinks?.classList.remove("open");
     menuToggle?.classList.remove("active");
+    menuToggle?.setAttribute("aria-expanded", "false");
   });
 });
 
@@ -50,96 +98,114 @@ backToTop?.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
-/* Reveal Animation */
-const revealObserver = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("active");
-        revealObserver.unobserve(entry.target);
-      }
-    });
-  },
-  { threshold: 0.15 }
-);
+/* ─── Reveal Animation ────────────────────────────────── */
+if ("IntersectionObserver" in window) {
+  const revealObs = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add("active");
+          revealObs.unobserve(e.target);
+        }
+      });
+    },
+    { threshold: 0.12 }
+  );
 
-$$(".reveal").forEach((el) => revealObserver.observe(el));
+  $$(".reveal").forEach((el) => revealObs.observe(el));
+} else {
+  $$(".reveal").forEach((el) => el.classList.add("active"));
+}
 
-/* FAQ */
+/* ─── FAQ ─────────────────────────────────────────────── */
 $$(".faq-item").forEach((item) => {
-  const button = item.querySelector("button");
-
-  button?.addEventListener("click", () => {
-    $$(".faq-item").forEach((faq) => {
-      if (faq !== item) faq.classList.remove("active");
-    });
-
-    item.classList.toggle("active");
+  item.querySelector("button")?.addEventListener("click", () => {
+    const isOpen = item.classList.contains("active");
+    $$(".faq-item").forEach((f) => f.classList.remove("active"));
+    if (!isOpen) item.classList.add("active");
   });
 });
 
-/* Quote Modal */
-function updateQuoteStep() {
+/* ─── Exit Popup ──────────────────────────────────────── */
+function showExitPopup() {
+  if (popupShown || !exitPopup) return;
+
+  popupShown = true;
+  exitPopup.classList.add("open");
+  lockBody();
+}
+
+function closeExitPopup() {
+  if (!exitPopup) return;
+
+  exitPopup.classList.remove("open");
+  unlockBody();
+}
+
+if (exitPopup) {
+  setTimeout(() => {
+    if (!popupShown) showExitPopup();
+  }, 8000);
+
+  exitPopup.querySelector(".popup-close")?.addEventListener("click", closeExitPopup);
+  exitPopup.querySelector(".popup-skip")?.addEventListener("click", closeExitPopup);
+  popupOverlay?.addEventListener("click", closeExitPopup);
+
+  exitPopup.querySelector(".popup-cta")?.addEventListener("click", () => {
+    closeExitPopup();
+    openQuoteModal();
+  });
+}
+
+/* ─── Quote Modal ─────────────────────────────────────── */
+function updateStep() {
   if (!quoteSteps.length) return;
 
-  quoteSteps.forEach((step, index) => {
-    step.classList.toggle("active", index === currentQuoteStep);
+  const total = quoteSteps.length;
+
+  quoteSteps.forEach((step, i) => {
+    step.classList.toggle("active", i === currentStep);
   });
 
-  const totalSteps = quoteSteps.length;
-  const progressWidth = ((currentQuoteStep + 1) / totalSteps) * 100;
+  if (quoteProgress) {
+    quoteProgress.style.width = `${((currentStep + 1) / total) * 100}%`;
+  }
 
-  if (quoteProgress) quoteProgress.style.width = `${progressWidth}%`;
   if (quoteStepCount) {
-    quoteStepCount.textContent = `Step ${currentQuoteStep + 1} of ${totalSteps}`;
+    quoteStepCount.textContent = `Step ${currentStep + 1} of ${total}`;
   }
 
-  if (prevStepButton) {
-    prevStepButton.style.display = currentQuoteStep === 0 ? "none" : "inline-flex";
+  if (prevBtn) {
+    prevBtn.style.display = currentStep === 0 ? "none" : "inline-flex";
   }
 
-  if (nextStepButton) {
-    nextStepButton.style.display =
-      currentQuoteStep === totalSteps - 1 ? "none" : "inline-flex";
+  if (nextBtn) {
+    nextBtn.style.display = currentStep === total - 1 ? "none" : "inline-flex";
   }
 
-  if (submitQuoteButton) {
-    submitQuoteButton.style.display =
-      currentQuoteStep === totalSteps - 1 ? "inline-flex" : "none";
+  if (submitBtn) {
+    submitBtn.style.display = currentStep === total - 1 ? "inline-flex" : "none";
   }
 
-  if (formMessage) formMessage.textContent = "";
+  if (formMessage) {
+    formMessage.textContent = "";
+  }
 }
 
-function openQuoteModal(event) {
-  event?.preventDefault();
+function validateStep() {
+  const active = quoteSteps[currentStep];
+  if (!active) return true;
 
-  quoteModal?.classList.add("open");
-  quoteModal?.setAttribute("aria-hidden", "false");
-  document.body.style.overflow = "hidden";
-
-  currentQuoteStep = 0;
-  updateQuoteStep();
-}
-
-function closeQuoteModal() {
-  quoteModal?.classList.remove("open");
-  quoteModal?.setAttribute("aria-hidden", "true");
-  document.body.style.overflow = "";
-}
-
-function validateCurrentStep() {
-  const activeStep = quoteSteps[currentQuoteStep];
-  if (!activeStep) return true;
-
-  const requiredFields = activeStep.querySelectorAll("[required]");
+  const requiredFields = active.querySelectorAll("[required]");
 
   for (const field of requiredFields) {
     if (!field.value.trim()) {
       field.focus();
+
       if (formMessage) {
-        formMessage.textContent = "Please fill the required field before moving next.";
+        formMessage.textContent = "Please fill the required field.";
       }
+
       return false;
     }
   }
@@ -147,112 +213,137 @@ function validateCurrentStep() {
   return true;
 }
 
-$$(".quote-open").forEach((button) => {
-  button.addEventListener("click", openQuoteModal);
+function openQuoteModal(e) {
+  e?.preventDefault();
+
+  if (!quoteModal) return;
+
+  quoteModal.classList.add("open");
+  quoteModal.setAttribute("aria-hidden", "false");
+  lockBody();
+
+  currentStep = 0;
+  updateStep();
+}
+
+function closeQuoteModal() {
+  if (!quoteModal) return;
+
+  quoteModal.classList.remove("open");
+  quoteModal.setAttribute("aria-hidden", "true");
+  unlockBody();
+}
+
+$$(".quote-open").forEach((btn) => {
+  btn.addEventListener("click", openQuoteModal);
 });
 
-$$("[data-close-quote]").forEach((button) => {
-  button.addEventListener("click", closeQuoteModal);
+$$("[data-close-quote]").forEach((btn) => {
+  btn.addEventListener("click", closeQuoteModal);
 });
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && quoteModal?.classList.contains("open")) {
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
     closeQuoteModal();
+    closeExitPopup();
   }
 });
 
-prevStepButton?.addEventListener("click", () => {
-  if (currentQuoteStep > 0) {
-    currentQuoteStep--;
-    updateQuoteStep();
+prevBtn?.addEventListener("click", () => {
+  if (currentStep > 0) {
+    currentStep--;
+    updateStep();
   }
 });
 
-nextStepButton?.addEventListener("click", () => {
-  if (!validateCurrentStep()) return;
-
-  if (currentQuoteStep < quoteSteps.length - 1) {
-    currentQuoteStep++;
-    updateQuoteStep();
+nextBtn?.addEventListener("click", () => {
+  if (validateStep() && currentStep < quoteSteps.length - 1) {
+    currentStep++;
+    updateStep();
   }
 });
 
-quoteForm?.addEventListener("submit", (event) => {
-  event.preventDefault();
+quoteForm?.addEventListener("submit", (e) => {
+  e.preventDefault();
 
-  if (!validateCurrentStep()) return;
+  if (!validateStep()) return;
 
   const formData = new FormData(quoteForm);
   const name = formData.get("name") || "there";
 
   if (formMessage) {
-    formMessage.textContent = `Thank you, ${name}! Your quote request has been submitted.`;
+    formMessage.textContent = `🎉 Thank you, ${name}! We'll get back to you shortly.`;
   }
 
   quoteForm.reset();
-  currentQuoteStep = 0;
+  currentStep = 0;
 
   setTimeout(() => {
-    updateQuoteStep();
+    updateStep();
     closeQuoteModal();
   }, 1800);
 });
 
-/* Portfolio Data */
+/* ─── Portfolio Data ──────────────────────────────────── */
 const portfolioData = [
-  ["logo", "Logo Digitizing", "Corporate Shirt Logo", "Clean left chest digitizing for uniform embroidery."],
-  ["patch", "Custom Patch", "Badge Patch Design", "Patch-ready layout with bold border and crisp detail."],
-  ["vector", "Vector Conversion", "Raster to Vector Artwork", "Low-resolution image converted into print-ready vector."],
-  ["cap", "Cap Digitizing", "Front Cap Embroidery", "Optimized stitching flow for curved cap placement."],
-  ["logo", "Machine File", "DST / PES / EMB Files", "Stitch-ready embroidery formats for production."],
-  ["patch", "Premium Patch", "3D Puff Patch Style", "Bold raised effect for standout apparel branding."],
-  ["vector", "Vector Art", "Clean Vector Design", "Sharp artwork prepared for embroidery and printing."],
-  ["cap", "Hat Embroidery", "Cap Side Logo", "Professional stitch setup for cap side placement."],
-  ["logo", "Brand Logo", "Business Logo Digitizing", "Neat and production-ready logo embroidery file."],
-  ["patch", "Patch Design", "Uniform Badge Patch", "Durable patch artwork with clean stitch borders."],
-  ["vector", "Artwork Redraw", "Logo Vector Redraw", "Pixelated artwork converted into sharp clean lines."],
-  ["cap", "Cap Logo", "Structured Cap Embroidery", "Balanced stitching for front crown embroidery."],
-  ["logo", "Logo File", "Left Chest Logo", "Small logo digitizing with readable stitch detail."],
-  ["patch", "Custom Patch", "Round Patch Design", "Clean circular patch with bold embroidered edges."],
-  ["vector", "Vector Service", "Print Ready Vector", "High-quality vector file for print and embroidery."],
-  ["cap", "Hat Logo", "Flat Cap Embroidery", "Smooth stitch layout for clean cap branding."],
-  ["logo", "Embroidery Logo", "Premium Brand Logo", "Detailed stitch file for professional brand apparel."],
-  ["patch", "Patch Work", "Jacket Patch Design", "Strong patch style made for jackets and hoodies."],
-  ["vector", "Vector Conversion", "Clean Line Artwork", "Converted design with smooth outlines and detail."],
-  ["cap", "Cap Embroidery", "Premium Cap Logo", "Production-ready cap logo with proper stitch density."]
+  ["logo", "Logo Digitizing", "Corporate Shirt Logo"],
+  ["patch", "Custom Patch", "Badge Patch Design"],
+  ["vector", "Vector Conversion", "Raster to Vector Artwork"],
+  ["cap", "Cap Digitizing", "Front Cap Embroidery"],
+  ["logo", "Machine File", "DST / PES / EMB Files"],
+  ["patch", "Premium Patch", "3D Puff Patch Style"],
+  ["vector", "Vector Art", "Clean Vector Design"],
+  ["cap", "Hat Embroidery", "Cap Side Logo"],
+  ["logo", "Brand Logo", "Business Logo Digitizing"],
+  ["patch", "Patch Design", "Uniform Badge Patch"],
+  ["vector", "Artwork Redraw", "Logo Vector Redraw"],
+  ["cap", "Cap Logo", "Structured Cap Embroidery"],
+  ["logo", "Logo File", "Left Chest Logo"],
+  ["patch", "Custom Patch", "Round Patch Design"],
+  ["vector", "Vector Service", "Print Ready Vector"],
+  ["cap", "Hat Logo", "Flat Cap Embroidery"],
+  ["logo", "Embroidery Logo", "Premium Brand Logo"],
+  ["patch", "Patch Work", "Jacket Patch Design"],
+  ["vector", "Vector Conversion", "Clean Line Artwork"],
+  ["cap", "Cap Embroidery", "Premium Cap Logo"],
 ];
 
-function getFilteredItems() {
-  return currentFilter === "all"
-    ? portfolioData
-    : portfolioData.filter((item) => item[0] === currentFilter);
+function getFiltered() {
+  if (currentFilter === "all") return portfolioData;
+  return portfolioData.filter((item) => item[0] === currentFilter);
 }
 
 function renderPortfolio() {
-  if (!portfolioGrid || !pagination) return;
+  if (!portfolioGrid || !paginationEl) return;
 
-  const items = getFilteredItems();
-  const start = (currentPage - 1) * cardsPerPage;
-  const paginatedItems = items.slice(start, start + cardsPerPage);
+  const items = getFiltered();
+  const start = (currentPage - 1) * PER_PAGE;
+  const slice = items.slice(start, start + PER_PAGE);
 
-  portfolioGrid.innerHTML = paginatedItems
+  portfolioGrid.innerHTML = slice
     .map((item) => {
-      const imageNumber = portfolioData.indexOf(item) + 1;
+      const idx = portfolioData.indexOf(item) + 1;
 
       return `
         <article class="portfolio-card reveal active" data-category="${item[0]}">
-          <img
-            src="./Assets/1 (${imageNumber}).jpeg"
-            class="portfolio-img"
-            width="550"
-            height="300"
-            loading="lazy"
-            alt="${item[2]}"
-          >
+          <div class="portfolio-img-wrap">
+            <img 
+              src="./Assets/1 (${idx}).jpeg" 
+              class="portfolio-img" 
+              width="550" 
+              height="300" 
+              loading="lazy" 
+              alt="${item[2]}"
+              onerror="this.src='./Assets/placeholder.jpeg'"
+            >
+            <div class="portfolio-overlay">
+              <span class="portfolio-tag">${item[1]}</span>
+            </div>
+          </div>
+
           <div class="portfolio-content">
-            <span>${item[1]}</span>
+            <span class="portfolio-cat">${item[1]}</span>
             <h3>${item[2]}</h3>
-            <p>${item[3]}</p>
           </div>
         </article>
       `;
@@ -262,36 +353,42 @@ function renderPortfolio() {
   renderPagination(items.length);
 }
 
-function renderPagination(totalItems) {
-  if (!pagination) return;
+function renderPagination(total) {
+  if (!paginationEl) return;
 
-  const totalPages = Math.ceil(totalItems / cardsPerPage);
-  pagination.innerHTML = "";
+  const pages = Math.ceil(total / PER_PAGE);
 
-  if (totalPages <= 1) return;
+  if (pages <= 1) {
+    paginationEl.innerHTML = "";
+    return;
+  }
 
-  let buttons = `
-    <button class="page-btn" ${currentPage === 1 ? "disabled" : ""} data-page="prev">‹</button>
+  let html = `
+    <button class="page-btn" ${currentPage === 1 ? "disabled" : ""} data-page="prev">
+      ‹
+    </button>
   `;
 
-  for (let i = 1; i <= totalPages; i++) {
-    buttons += `
+  for (let i = 1; i <= pages; i++) {
+    html += `
       <button class="page-btn ${currentPage === i ? "active" : ""}" data-page="${i}">
         ${i}
       </button>
     `;
   }
 
-  buttons += `
-    <button class="page-btn" ${currentPage === totalPages ? "disabled" : ""} data-page="next">›</button>
+  html += `
+    <button class="page-btn" ${currentPage === pages ? "disabled" : ""} data-page="next">
+      ›
+    </button>
   `;
 
-  pagination.innerHTML = buttons;
+  paginationEl.innerHTML = html;
 }
 
 filterBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
-    filterBtns.forEach((item) => item.classList.remove("active"));
+    filterBtns.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
 
     currentFilter = btn.dataset.filter || "all";
@@ -301,19 +398,73 @@ filterBtns.forEach((btn) => {
   });
 });
 
-pagination?.addEventListener("click", (event) => {
-  const button = event.target.closest(".page-btn");
-  if (!button || button.disabled) return;
+paginationEl?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".page-btn");
 
-  const page = button.dataset.page;
-  const totalPages = Math.ceil(getFilteredItems().length / cardsPerPage);
+  if (!btn || btn.disabled) return;
 
-  if (page === "prev" && currentPage > 1) currentPage--;
-  else if (page === "next" && currentPage < totalPages) currentPage++;
-  else if (!Number.isNaN(Number(page))) currentPage = Number(page);
+  const page = btn.dataset.page;
+  const totalPages = Math.ceil(getFiltered().length / PER_PAGE);
+
+  if (page === "prev" && currentPage > 1) {
+    currentPage--;
+  } else if (page === "next" && currentPage < totalPages) {
+    currentPage++;
+  } else if (!isNaN(Number(page))) {
+    currentPage = Number(page);
+  }
 
   renderPortfolio();
+
+  portfolioGrid?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
 });
 
-updateQuoteStep();
+/* ─── Counter Animation ───────────────────────────────── */
+function animateCounters() {
+  $$(".stat-number[data-target]").forEach((el) => {
+    if (el.dataset.animated === "true") return;
+
+    el.dataset.animated = "true";
+
+    const target = Number(el.dataset.target) || 0;
+    const suffix = el.dataset.suffix || "";
+
+    let count = 0;
+    const step = Math.max(target / 60, 1);
+
+    const timer = setInterval(() => {
+      count = Math.min(count + step, target);
+      el.textContent = Math.floor(count) + suffix;
+
+      if (count >= target) {
+        el.textContent = target + suffix;
+        clearInterval(timer);
+      }
+    }, 25);
+  });
+}
+
+const statsSection = $(".stats-strip");
+
+if (statsSection && "IntersectionObserver" in window) {
+  const statsObs = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          animateCounters();
+          statsObs.disconnect();
+        }
+      });
+    },
+    { threshold: 0.5 }
+  );
+
+  statsObs.observe(statsSection);
+}
+
+/* ─── Init ────────────────────────────────────────────── */
+updateStep();
 renderPortfolio();
